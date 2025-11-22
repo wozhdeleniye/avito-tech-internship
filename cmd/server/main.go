@@ -3,15 +3,16 @@ package main
 import (
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/wozhdeleniye/avito-tech-internship/internal/app/router"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/config"
+	"github.com/wozhdeleniye/avito-tech-internship/internal/pkg/db/database"
+	"github.com/wozhdeleniye/avito-tech-internship/internal/pkg/db/redis"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/migrations"
 	postgresrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/postgres_repository"
 	redisrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/redis_repository"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/services"
-	"github.com/wozhdeleniye/avito-tech-internship/pkg/database"
-	"github.com/wozhdeleniye/avito-tech-internship/pkg/redis"
 )
 
 func main() {
@@ -56,11 +57,23 @@ func main() {
 	defer redisClient.Close()
 
 	userRepo := postgresrepository.NewUserRepository(db)
+	teamRepo := postgresrepository.NewTeamRepository(db)
+	prRepo := postgresrepository.NewPReqRepository(db)
 	tokenRepo := redisrepository.NewTokenRepository(redisClient)
 
 	authService := services.NewAuthService(userRepo, tokenRepo, cfg.JWT)
+	teamService := services.NewTeamService(prRepo, teamRepo, userRepo)
+	prService := services.NewPReqService(prRepo, teamRepo, userRepo)
 
-	r := router.NewApp(authService)
+	r := router.NewApp(authService, prService, teamService)
 
-	http.ListenAndServe(cfg.Server.Port, r)
+	addr := cfg.Server.Port
+	if !strings.HasPrefix(addr, ":") {
+		addr = ":" + addr
+	}
+
+	log.Printf("Starting server on %s", addr)
+	if err := http.ListenAndServe(addr, r); err != nil {
+		log.Fatalf("server stopped: %v", err)
+	}
 }

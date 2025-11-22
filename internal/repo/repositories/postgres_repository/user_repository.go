@@ -24,7 +24,22 @@ func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) erro
 
 func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	var user models.User
-	result := r.db.WithContext(ctx).Where("email = ? AND is_active = ?", email, true).First(&user)
+	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user) //доделать проверку с custom id
+
+	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	return &user, nil
+}
+
+func (r *UserRepository) GetUserById(ctx context.Context, cutstomId string) (*models.User, error) {
+	var user models.User
+	result := r.db.WithContext(ctx).Where("user_custom_id = ?", cutstomId).First(&user) //доделать проверку с custom id
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -68,7 +83,7 @@ func (r *UserRepository) GetUserByCustomID(ctx context.Context, customID string)
 	result := r.db.WithContext(ctx).Where("user_custom_id = ? AND is_active = ?", customID, true).First(&user)
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return nil, nil
+		return nil, gorm.ErrRecordNotFound
 	}
 
 	if result.Error != nil {

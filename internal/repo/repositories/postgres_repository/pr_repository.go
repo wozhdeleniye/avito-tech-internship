@@ -67,13 +67,3 @@ func (r *PReqRepository) ListPullRequestsByReviewerCustomID(ctx context.Context,
 	}
 	return prs, nil
 }
-
-func (r *PReqRepository) AssignReviewer(ctx context.Context, prID string, reviewer *models.User) error {
-	var pr models.PullRequest
-	result := r.db.WithContext(ctx).Preload("AssignedReviewers").Where("pull_request_custom_id = ?", prID).First(&pr)
-	if result.Error != nil {
-		return result.Error
-	}
-	pr.AssignedReviewers = append(pr.AssignedReviewers, reviewer)
-	return r.db.WithContext(ctx).Save(&pr).Error
-}

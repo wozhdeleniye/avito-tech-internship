@@ -22,6 +22,27 @@ func (r *TeamRepository) CreateTeam(ctx context.Context, team *models.Team) erro
 	return result.Error
 }
 
+// цельная транзакция для создания команды и назначения участников
+func (r *TeamRepository) CreateTeamWithMembers(ctx context.Context, team *models.Team) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(team).Error; err != nil {
+			return err
+		}
+
+		for _, member := range team.Members {
+			if member == nil {
+				continue
+			}
+			member.TeamID = &team.ID
+			if err := tx.Save(member).Error; err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+}
+
 func (r *TeamRepository) GetTeamByID(ctx context.Context, id uuid.UUID) (*models.Team, error) {
 	var team models.Team
 	result := r.db.WithContext(ctx).Preload("Members").Where("id = ?", id).First(&team)

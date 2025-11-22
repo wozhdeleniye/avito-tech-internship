@@ -8,8 +8,10 @@ import (
 	"math/rand"
 
 	openapi "github.com/wozhdeleniye/avito-tech-internship/api"
+	serviceerrors "github.com/wozhdeleniye/avito-tech-internship/internal/pkg/errors"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/models"
 	postgresrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/postgres_repository"
+	"gorm.io/gorm"
 )
 
 type PReqService struct {
@@ -26,20 +28,29 @@ func NewPReqService(prRepo *postgresrepository.PReqRepository, teamRepo *postgre
 	}
 }
 
-func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody openapi.PostPullRequestCreateJSONBody) (*openapi.PullRequest, error) {
+func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody openapi.PostPullRequestCreateJSONBody) (*openapi.PullRequest, *serviceerrors.ServiceError) {
 	author, err := prserv.UserRepo.GetUserByCustomID(ctx, prReqBody.AuthorId)
-	if err != nil || author == nil {
-		return nil, err
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	if author == nil {
+		return nil, serviceerrors.ErrUserNotFound
 	}
 
-	team, err := prserv.TeamRepo.GetTeamByID(ctx, author.TeamID)
-	if err != nil || team == nil {
-		return nil, err
+	var team *models.Team
+	if author.TeamID != nil {
+		team, err = prserv.TeamRepo.GetTeamByID(ctx, *author.TeamID)
+	}
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	if team == nil {
+		return nil, serviceerrors.ErrTeamNotFound
 	}
 
 	candidates, err := prserv.TeamRepo.GetAllParticipantsButNotSpecial(ctx, team.ID.String(), author.ID.String())
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
 
 	reviewers := make([]*models.User, 0, 2)
@@ -63,7 +74,7 @@ func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody open
 		AssignedReviewers:   reviewers,
 	}
 	if err := prserv.PRRepo.CreatePullRequest(ctx, pr); err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
 
 	resp := &openapi.PullRequest{
@@ -79,27 +90,39 @@ func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody open
 	return resp, nil
 }
 
-func (prserv *PReqService) MarkPullReqAsMerged(ctx context.Context, prId string) (*openapi.PullRequest, error) {
+func (prserv *PReqService) MarkPullReqAsMerged(ctx context.Context, prId string) (*openapi.PullRequest, *serviceerrors.ServiceError) {
 	pullRequest, err := prserv.PRRepo.GetPullRequestByID(ctx, prId)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, serviceerrors.ErrPRNotFound
+		}
+		return nil, serviceerrors.ErrUnknown
+	}
+
+	if pullRequest == nil {
+		return nil, serviceerrors.ErrPRNotFound
 	}
 
 	if pullRequest.Status != "MERGED" {
 		pullRequest.Status = "MERGED"
 		now := time.Now().Unix()
 		pullRequest.MergedAt = &now
-		err = prserv.PRRepo.UpdatePullRequest(ctx, pullRequest)
-		if err != nil {
-			return nil, err
+		if err := prserv.PRRepo.UpdatePullRequest(ctx, pullRequest); err != nil {
+			return nil, serviceerrors.ErrUnknown
 		}
 	}
+
 	crAt := time.Unix(pullRequest.CreatedAt, 0)
-	mrAt := time.Unix(*pullRequest.MergedAt, 0)
+	var mrAt *time.Time
+	if pullRequest.MergedAt != nil {
+		t := time.Unix(*pullRequest.MergedAt, 0)
+		mrAt = &t
+	}
+
 	resp := &openapi.PullRequest{
 		AuthorId:          pullRequest.Author.UserCustomID,
 		CreatedAt:         &crAt,
-		MergedAt:          &mrAt,
+		MergedAt:          mrAt,
 		PullRequestId:     pullRequest.PullRequestCustomID,
 		PullRequestName:   pullRequest.PullRequestName,
 		Status:            openapi.PullRequestStatus(pullRequest.Status),
@@ -111,13 +134,21 @@ func (prserv *PReqService) MarkPullReqAsMerged(ctx context.Context, prId string)
 	return resp, nil
 }
 
-func (prserv *PReqService) ReassignReviewer(ctx context.Context, prId, old_reviewer_id string) (*models.PullRequestReassign, error) {
+func (prserv *PReqService) ReassignReviewer(ctx context.Context, prId, old_reviewer_id string) (*models.PullRequestReassign, *serviceerrors.ServiceError) {
 	pullRequest, err := prserv.PRRepo.GetPullRequestByID(ctx, prId)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, serviceerrors.ErrPRNotFound
+		}
+		return nil, serviceerrors.ErrUnknown
 	}
+
+	if pullRequest == nil {
+		return nil, serviceerrors.ErrPRNotFound
+	}
+
 	if pullRequest.Status != "OPEN" {
-		return nil, errors.New("cannot reassign reviewer for closed pull request")
+		return nil, serviceerrors.ErrPRMerged
 	}
 
 	var oldReviewer *models.User
@@ -131,30 +162,47 @@ func (prserv *PReqService) ReassignReviewer(ctx context.Context, prId, old_revie
 		}
 	}
 	if oldReviewer == nil {
-		return nil, errors.New("old reviewer not found")
+		return nil, serviceerrors.ErrNotAssigned
+	}
+	var team *models.Team
+	if oldReviewer.TeamID != nil {
+		team, err = prserv.TeamRepo.GetTeamByID(ctx, *oldReviewer.TeamID)
+	}
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	if team == nil {
+		return nil, serviceerrors.ErrUnknown
 	}
 
-	team, err := prserv.TeamRepo.GetTeamByID(ctx, oldReviewer.ID)
-	if err != nil || team == nil {
-		return nil, err
-	}
-	excluded := append(team.Members, &pullRequest.Author)
-	newReviewer := prserv.TeamRepo.PickMemberNotInList(excluded, pullRequest.AssignedReviewers)
+	// Build excluded list: currently assigned reviewers + author
+	excluded := make([]*models.User, 0, len(pullRequest.AssignedReviewers)+1)
+	excluded = append(excluded, pullRequest.AssignedReviewers...)
+	excluded = append(excluded, &pullRequest.Author)
+
+	newReviewer := prserv.TeamRepo.PickMemberNotInList(team.Members, excluded)
 	if newReviewer == nil {
-		return nil, errors.New("no available new reviewer found")
+		return nil, serviceerrors.ErrNoCandidate
 	}
+
 	pullRequest.AssignedReviewers[oldIndex] = newReviewer
 	if err := prserv.PRRepo.UpdatePullRequest(ctx, pullRequest); err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
+
 	crAt := time.Unix(pullRequest.CreatedAt, 0)
-	mrAt := time.Unix(*pullRequest.MergedAt, 0)
+	var mrAt *time.Time
+	if pullRequest.MergedAt != nil {
+		t := time.Unix(*pullRequest.MergedAt, 0)
+		mrAt = &t
+	}
+
 	resp := models.PullRequestReassign{
 		PullRequest: openapi.PullRequest{
 			AssignedReviewers: make([]string, 0, len(pullRequest.AssignedReviewers)),
 			AuthorId:          pullRequest.Author.UserCustomID,
 			CreatedAt:         &crAt,
-			MergedAt:          &mrAt,
+			MergedAt:          mrAt,
 			PullRequestId:     pullRequest.PullRequestCustomID,
 			PullRequestName:   pullRequest.PullRequestName,
 			Status:            openapi.PullRequestStatus(pullRequest.Status),
@@ -167,10 +215,10 @@ func (prserv *PReqService) ReassignReviewer(ctx context.Context, prId, old_revie
 	return &resp, nil
 }
 
-func (prserv *PReqService) GetPullReqsByReviever(ctx context.Context, reviewer_id string) (*models.PullRequestSearch, error) {
+func (prserv *PReqService) GetPullReqsByReviever(ctx context.Context, reviewer_id string) (*models.PullRequestSearch, *serviceerrors.ServiceError) {
 	prList, err := prserv.PRRepo.ListPullRequestsByReviewerCustomID(ctx, reviewer_id)
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
 
 	resp := &models.PullRequestSearch{

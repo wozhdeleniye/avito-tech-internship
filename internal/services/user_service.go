@@ -8,6 +8,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/config"
+	serviceerrors "github.com/wozhdeleniye/avito-tech-internship/internal/pkg/errors"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/models"
 	postgresrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/postgres_repository"
 	redisrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/redis_repository"
@@ -49,7 +50,7 @@ func NewAuthService(userRepo *postgresrepository.UserRepository, tokenRepo *redi
 
 func (s *AuthService) Register(ctx context.Context, req *models.CreateUserRequest) (*models.AuthResponse, error) {
 
-	existingUser, err := s.userRepo.GetUserByEmail(ctx, req.Email)
+	existingUser, err := s.userRepo.GetUserById(ctx, req.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -58,8 +59,9 @@ func (s *AuthService) Register(ctx context.Context, req *models.CreateUserReques
 	}
 
 	user := &models.User{
-		Email:    req.Email,
-		Nickname: req.Nickname,
+		Email:        req.Email,
+		Nickname:     req.Nickname,
+		UserCustomID: req.Id,
 	}
 
 	if err := user.SetPassword(req.Password); err != nil {
@@ -237,15 +239,19 @@ func (s *AuthService) validateToken(tokenString, secret string) (*Claims, error)
 	return nil, ErrTokenInvalid
 }
 
-func (s *AuthService) SetUserActive(ctx context.Context, userId string, isActive bool) (*models.User, error) {
+func (s *AuthService) SetUserActive(ctx context.Context, userId string, isActive bool) (*models.User, *serviceerrors.ServiceError) {
 	user, err := s.userRepo.GetUserByCustomID(ctx, userId)
 	if err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
+	if user == nil {
+		return nil, serviceerrors.ErrUserNotFound
+	}
+
 	user.IsActive = isActive
 
 	if err := s.userRepo.UpdateUser(ctx, user); err != nil {
-		return nil, err
+		return nil, serviceerrors.ErrUnknown
 	}
 
 	return user, nil

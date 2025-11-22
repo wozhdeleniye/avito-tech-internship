@@ -18,14 +18,15 @@ type User struct {
 	CreatedAt    time.Time      `json:"created_at"`
 	UpdatedAt    time.Time      `json:"updated_at"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index"`
-	TeamID       uuid.UUID      `json:"team_id" gorm:"type:uuid;index"`
-	Team         Team           `json:"team" gorm:"foreignKey:TeamID"`
+	TeamID       *uuid.UUID     `json:"team_id" gorm:"type:uuid;index;default:null"`
+	Team         *Team          `json:"team,omitempty" gorm:"foreignKey:TeamID"`
 }
 
 type CreateUserRequest struct {
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=6"`
 	Nickname string `json:"nickname" validate:"required"`
+	Id       string `json:"id" validate:"required"`
 }
 
 type LoginRequest struct {
