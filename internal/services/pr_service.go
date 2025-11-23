@@ -239,3 +239,19 @@ func (prserv *PReqService) GetPullReqsByReviever(ctx context.Context, reviewer_i
 	return resp, nil
 
 }
+
+func (prserv *PReqService) CountAssignmentsPerUser(ctx context.Context) (map[string]int64, *serviceerrors.ServiceError) {
+	res, err := prserv.PRRepo.CountAssignmentsPerUser(ctx)
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	return res, nil
+}
+
+func (prserv *PReqService) CountAssignmentsPerPR(ctx context.Context) (map[string]int64, *serviceerrors.ServiceError) {
+	res, err := prserv.PRRepo.CountAssignmentsPerPR(ctx)
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	return res, nil
+}

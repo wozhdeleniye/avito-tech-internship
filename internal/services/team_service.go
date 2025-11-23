@@ -107,3 +107,74 @@ func (s *TeamService) SetUserActive(ctx context.Context, userId string, isActive
 
 	return user, nil
 }
+
+func (s *TeamService) MassDeactivateTeam(ctx context.Context, oldTeamName string, newTeamName string) (map[string]interface{}, *serviceerrors.ServiceError) {
+	oldTeam, err := s.TeamRepo.FindTeamByName(ctx, oldTeamName)
+	if err != nil {
+		return nil, serviceerrors.ErrTeamNotFound
+	}
+	if oldTeam == nil || len(oldTeam.Members) == 0 {
+		return map[string]interface{}{"deactivated": []string{}, "reassignments": []interface{}{}}, nil
+	}
+
+	newTeam, err := s.TeamRepo.FindTeamByName(ctx, newTeamName)
+	if err != nil {
+		return nil, serviceerrors.ErrTeamNotFound
+	}
+	if newTeam == nil || len(newTeam.Members) == 0 {
+		return nil, serviceerrors.ErrTeamNotFound
+	}
+
+	ids := make([]string, 0, len(oldTeam.Members))
+	customIDs := make([]string, 0, len(oldTeam.Members))
+	for _, m := range oldTeam.Members {
+		if m == nil {
+			continue
+		}
+		ids = append(ids, m.ID.String())
+		customIDs = append(customIDs, m.UserCustomID)
+	}
+
+	if err := s.UserRepo.SetUsersActiveByIDs(ctx, ids, false); err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+
+	prs, err := s.PRRepo.ListOpenPullRequestsByReviewerIDs(ctx, ids)
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+
+	reassignments := make([]map[string]string, 0)
+	for _, pr := range prs {
+		if pr == nil {
+			continue
+		}
+		changed := false
+		for i, reviewer := range pr.AssignedReviewers {
+			if reviewer == nil {
+				continue
+			}
+			for _, did := range ids {
+				if reviewer.ID.String() == did {
+					excluded := make([]*models.User, 0, len(pr.AssignedReviewers)+1)
+					excluded = append(excluded, pr.AssignedReviewers...)
+					excluded = append(excluded, &pr.Author)
+					newReviewer := s.TeamRepo.PickMemberNotInList(newTeam.Members, excluded)
+					if newReviewer != nil {
+						pr.AssignedReviewers[i] = newReviewer
+						changed = true
+						reassignments = append(reassignments, map[string]string{"pr_id": pr.PullRequestCustomID, "new_reviewer": newReviewer.UserCustomID})
+					}
+					break
+				}
+			}
+		}
+		if changed {
+			if err := s.PRRepo.UpdatePullRequest(ctx, pr); err != nil {
+				return nil, serviceerrors.ErrUnknown
+			}
+		}
+	}
+
+	return map[string]interface{}{"deactivated": customIDs, "reassignments": reassignments}, nil
+}

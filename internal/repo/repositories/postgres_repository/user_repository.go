@@ -69,3 +69,22 @@ func (r *UserRepository) UserExistsByCustomID(ctx context.Context, customID stri
 	result := r.db.WithContext(ctx).Model(&models.User{}).Where("user_custom_id = ? AND is_active = ?", customID, true).Count(&count)
 	return count > 0, result.Error
 }
+
+func (r *UserRepository) SetUsersActiveByTeamID(ctx context.Context, teamID string, isActive bool) error {
+	result := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("team_id = ?", teamID).
+		Update("is_active", isActive)
+	return result.Error
+}
+
+func (r *UserRepository) SetUsersActiveByIDs(ctx context.Context, ids []string, isActive bool) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	result := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Where("id IN ?", ids).
+		Update("is_active", isActive)
+	return result.Error
+}

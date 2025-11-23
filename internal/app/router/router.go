@@ -24,6 +24,16 @@ func NewApp(prService *services.PReqService, teamService *services.TeamService) 
 
 	r.Mount("/api", mainRouter)
 
+	adminRouter := chi.NewRouter()
+	adminHandler := handlers.AdminAPI{
+		PRService:   prService,
+		TeamService: teamService,
+	}
+	adminRouter.Get("/stats", adminHandler.GetAdminStats)
+	adminRouter.Post("/team/deactivate", adminHandler.PostAdminTeamDeactivate)
+
+	r.Mount("/api/admin", adminRouter)
+
 	return r
 }
 

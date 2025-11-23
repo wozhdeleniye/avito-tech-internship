@@ -83,3 +83,69 @@ func (r *PReqRepository) ListPullRequestsByReviewerCustomID(ctx context.Context,
 	}
 	return prs, nil
 }
+
+func (r *PReqRepository) ListOpenPullRequestsByReviewerIDs(ctx context.Context, reviewerIDs []string) ([]*models.PullRequest, error) {
+	if len(reviewerIDs) == 0 {
+		return nil, nil
+	}
+	var prs []*models.PullRequest
+	result := r.db.WithContext(ctx).
+		Preload("Author").
+		Preload("AssignedReviewers").
+		Joins("JOIN pull_request_reviewers ON pull_requests.id = pull_request_reviewers.pull_request_id").
+		Where("pull_requests.status = ? AND pull_request_reviewers.user_id IN ?", "OPEN", reviewerIDs).
+		Find(&prs)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return prs, nil
+}
+
+func (r *PReqRepository) CountAssignmentsPerUser(ctx context.Context) (map[string]int64, error) {
+	type row struct {
+		UserCustomID string
+		Cnt          int64
+	}
+	var rows []row
+	q := r.db.WithContext(ctx).
+		Table("pull_requests").
+		Select("users.user_custom_id as user_custom_id, COUNT(*) as cnt").
+		Joins("JOIN pull_request_reviewers ON pull_requests.id = pull_request_reviewers.pull_request_id").
+		Joins("JOIN users ON pull_request_reviewers.user_id = users.id").
+		Where("pull_requests.status = ?", "OPEN").
+		Group("users.user_custom_id")
+
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	res := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		res[r.UserCustomID] = r.Cnt
+	}
+	return res, nil
+}
+
+func (r *PReqRepository) CountAssignmentsPerPR(ctx context.Context) (map[string]int64, error) {
+	type row struct {
+		PRCustomID string
+		Cnt        int64
+	}
+	var rows []row
+
+	q := r.db.WithContext(ctx).
+		Table("pull_requests").
+		Select("pull_requests.pull_request_custom_id as pr_custom_id, COUNT(pull_request_reviewers.user_id) as cnt").
+		Joins("LEFT JOIN pull_request_reviewers ON pull_requests.id = pull_request_reviewers.pull_request_id").
+		Group("pull_requests.pull_request_custom_id")
+
+	if err := q.Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	res := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		res[r.PRCustomID] = r.Cnt
+	}
+	return res, nil
+}
