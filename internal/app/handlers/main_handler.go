@@ -13,7 +13,6 @@ import (
 type MainAPI struct {
 	PRService   *services.PReqService
 	TeamService *services.TeamService
-	AuthService *services.AuthService
 }
 
 func ErrorConstructor(code openapi.ErrorResponseErrorCode, message string) (Error struct {
@@ -233,7 +232,7 @@ func (h MainAPI) PostUsersSetIsActive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, serr := h.AuthService.SetUserActive(r.Context(), req.UserID, req.IsActive)
+	user, serr := h.TeamService.SetUserActive(r.Context(), req.UserID, req.IsActive)
 	if serr != nil {
 		w.Header().Set("Content-Type", "application/json")
 		status := serr.HTTPCode

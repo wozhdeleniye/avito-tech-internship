@@ -9,23 +9,7 @@ import (
 	"github.com/wozhdeleniye/avito-tech-internship/internal/services"
 )
 
-func NewAuthRouter(authHandler *handlers.AuthHandler) chi.Router {
-	r := chi.NewRouter()
-
-	r.Post("/login", authHandler.Login)
-	r.Post("/register", authHandler.Register)
-
-	//r.Group(func(protected chi.Router) {
-	//	protected.Use(authMiddleware.Authenticate)
-	//	protected.Post("/refresh", authHandler.Refresh)
-	//	protected.Post("/logout", authHandler.Logout)
-	//})
-
-	return r
-}
-
-// Обновлённая сигнатура NewApp: принимаем сервисы, необходимые для main API.
-func NewApp(authService *services.AuthService, prService *services.PReqService, teamService *services.TeamService) http.Handler {
+func NewApp(prService *services.PReqService, teamService *services.TeamService) http.Handler {
 	r := chi.NewRouter()
 	r.Use(CORSMiddleware())
 
@@ -35,16 +19,10 @@ func NewApp(authService *services.AuthService, prService *services.PReqService, 
 	mainHandler := handlers.MainAPI{
 		PRService:   prService,
 		TeamService: teamService,
-		AuthService: authService,
 	}
-	//mainRouter.Use(middleware.Authenticate) //сначала подумал, что понадобится аутентификация, но потом прочитал документацию и таску и понял, что вроде бы не требуется
 	openapi.HandlerFromMux(mainHandler, mainRouter)
 
-	authHandler := handlers.NewAuthHandler(authService)
-	authRouter := NewAuthRouter(authHandler)
-
 	r.Mount("/api", mainRouter)
-	r.Mount("/api/auth", authRouter)
 
 	return r
 }

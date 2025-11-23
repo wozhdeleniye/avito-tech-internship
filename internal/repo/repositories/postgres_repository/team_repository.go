@@ -3,6 +3,7 @@ package postgresrepository
 import (
 	"context"
 	"math/rand"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/models"
@@ -22,10 +23,14 @@ func (r *TeamRepository) CreateTeam(ctx context.Context, team *models.Team) erro
 	return result.Error
 }
 
-// цельная транзакция для создания команды и назначения участников
+// цельная транзакция для создания команды и созд участников
 func (r *TeamRepository) CreateTeamWithMembers(ctx context.Context, team *models.Team) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(team).Error; err != nil {
+		if err := tx.Omit("Members").Create(team).Error; err != nil {
+			le := strings.ToLower(err.Error())
+			if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") || strings.Contains(le, "violates unique") {
+				return ErrTeamExists
+			}
 			return err
 		}
 
@@ -33,8 +38,28 @@ func (r *TeamRepository) CreateTeamWithMembers(ctx context.Context, team *models
 			if member == nil {
 				continue
 			}
+
 			member.TeamID = &team.ID
-			if err := tx.Save(member).Error; err != nil {
+			if err := tx.Create(member).Error; err != nil {
+				le := strings.ToLower(err.Error())
+				if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") || strings.Contains(le, "violates unique") {
+					return ErrUserExists
+				}
+				return err
+			}
+		}
+
+		if len(team.Members) > 0 {
+			toAppend := make([]*models.User, 0, len(team.Members))
+			for _, m := range team.Members {
+				if m == nil {
+					continue
+				}
+				toAppend = append(toAppend, &models.User{ID: m.ID})
+			}
+
+			teamModel := &models.Team{ID: team.ID}
+			if err := tx.Model(teamModel).Association("Members").Append(toAppend); err != nil {
 				return err
 			}
 		}
@@ -53,11 +78,17 @@ func (r *TeamRepository) GetTeamByID(ctx context.Context, id uuid.UUID) (*models
 }
 
 func (r *TeamRepository) GetAllParticipantsButNotSpecial(ctx context.Context, teamID string, userID string) ([]*models.User, error) {
-	var team models.Team
-	if err := r.db.WithContext(ctx).Preload("Members", "user_custom_id != ?", userID).Where("id = ?", teamID).First(&team).Error; err != nil {
+	var members []*models.User
+
+	if err := r.db.WithContext(ctx).
+		Model(&models.User{}).
+		Joins("JOIN user_teams ut ON ut.user_id = users.id").
+		Where("ut.team_id = ? AND users.id != ? AND users.is_active = ?", teamID, userID, true).
+		Find(&members).Error; err != nil {
 		return nil, err
 	}
-	return team.Members, nil
+
+	return members, nil
 }
 
 func (r *TeamRepository) PickMemberNotInList(members []*models.User, excluded []*models.User) *models.User {
@@ -94,7 +125,7 @@ func (r *TeamRepository) PickMemberNotInList(members []*models.User, excluded []
 	return candidates[rand.Intn(len(candidates))]
 }
 
-func (r *TeamRepository) FindTeamsByName(ctx context.Context, name string) (*models.Team, error) {
+func (r *TeamRepository) FindTeamByName(ctx context.Context, name string) (*models.Team, error) {
 	var team models.Team
 	result := r.db.WithContext(ctx).Preload("Members").Where("team_name = ?", name).First(&team)
 	if result.Error != nil {

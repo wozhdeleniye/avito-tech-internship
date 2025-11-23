@@ -2,6 +2,7 @@ package postgresrepository
 
 import (
 	"context"
+	"strings"
 
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/models"
 	"gorm.io/gorm"
@@ -17,6 +18,12 @@ func NewPReqRepository(db *gorm.DB) *PReqRepository {
 
 func (r *PReqRepository) CreatePullRequest(ctx context.Context, pr *models.PullRequest) error {
 	result := r.db.WithContext(ctx).Create(pr)
+	if result.Error != nil {
+		le := strings.ToLower(result.Error.Error())
+		if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") || strings.Contains(le, "violates unique") {
+			return ErrPRExists
+		}
+	}
 	return result.Error
 }
 
@@ -30,8 +37,17 @@ func (r *PReqRepository) GetPullRequestByID(ctx context.Context, id string) (*mo
 }
 
 func (r *PReqRepository) UpdatePullRequest(ctx context.Context, pr *models.PullRequest) error {
-	result := r.db.WithContext(ctx).Save(pr)
-	return result.Error
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(pr).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(pr).Association("AssignedReviewers").Replace(pr.AssignedReviewers); err != nil {
+			return err
+		}
+
+		return nil
+	})
 }
 
 func (r *PReqRepository) ListPullRequests(ctx context.Context) ([]*models.PullRequest, error) {

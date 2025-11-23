@@ -16,18 +16,6 @@ services:
       - app-network
     restart: unless-stopped
 
-  redis:
-    image: redis:7-alpine
-    container_name: redis_cache
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - app-network
-    restart: unless-stopped
-    command: redis-server --appendonly yes
-
   adminer:
     image: adminer:4.8.1
     container_name: adminer_ui
@@ -41,9 +29,29 @@ services:
     depends_on:
       - postgres
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: avito_app
+    ports:
+      - "8085:8085"
+    environment:
+      SERVER_PORT: "8085"
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_USER: "myuser"
+      DB_PASSWORD: "mypassword"
+      DB_NAME: "mydatabase"
+      DB_SSL_MODE: "disable"
+    networks:
+      - app-network
+    restart: unless-stopped
+    depends_on:
+      - postgres
+
 volumes:
   postgres_data:
-  redis_data:
 
 networks:
   app-network:

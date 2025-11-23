@@ -29,7 +29,7 @@ func NewPReqService(prRepo *postgresrepository.PReqRepository, teamRepo *postgre
 }
 
 func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody openapi.PostPullRequestCreateJSONBody) (*openapi.PullRequest, *serviceerrors.ServiceError) {
-	author, err := prserv.UserRepo.GetUserByCustomID(ctx, prReqBody.AuthorId)
+	author, err := prserv.UserRepo.GetUserByCustomId(ctx, prReqBody.AuthorId)
 	if err != nil {
 		return nil, serviceerrors.ErrUnknown
 	}
@@ -74,6 +74,9 @@ func (prserv *PReqService) CreatePullRequest(ctx context.Context, prReqBody open
 		AssignedReviewers:   reviewers,
 	}
 	if err := prserv.PRRepo.CreatePullRequest(ctx, pr); err != nil {
+		if err == postgresrepository.ErrPRExists {
+			return nil, serviceerrors.ErrPRExists
+		}
 		return nil, serviceerrors.ErrUnknown
 	}
 
@@ -175,7 +178,6 @@ func (prserv *PReqService) ReassignReviewer(ctx context.Context, prId, old_revie
 		return nil, serviceerrors.ErrUnknown
 	}
 
-	// Build excluded list: currently assigned reviewers + author
 	excluded := make([]*models.User, 0, len(pullRequest.AssignedReviewers)+1)
 	excluded = append(excluded, pullRequest.AssignedReviewers...)
 	excluded = append(excluded, &pullRequest.Author)

@@ -15,9 +15,10 @@ func (e *ServiceError) Error() string {
 }
 
 var (
-	ErrTeamExists = &ServiceError{HTTPCode: 400, Code: "TEAM_EXISTS", Message: "team_name already exists"}
+	ErrTeamExists = &ServiceError{HTTPCode: 400, Code: "TEAM_EXISTS", Message: "team_name already in use"}
 
 	ErrUserNotFound = &ServiceError{HTTPCode: 404, Code: "USER_NOT_FOUND", Message: "user not found"}
+	ErrUserExists   = &ServiceError{HTTPCode: 409, Code: "USER_EXISTS", Message: "user exists"}
 )
 var (
 	ErrUnknown = &ServiceError{HTTPCode: 520, Code: "UNKNOWN_ERROR", Message: "unknown error"}

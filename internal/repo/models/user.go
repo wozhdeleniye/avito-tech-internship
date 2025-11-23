@@ -4,15 +4,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
 type User struct {
 	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	UserCustomID string         `gorm:"uniqueIndex;not null"`
-	Email        string         `json:"email" gorm:"uniqueIndex;not null"`
-	PasswordHash string         `json:"-" gorm:"not null"`
 	Nickname     string         `json:"nickname" gorm:"not null"`
 	IsActive     bool           `json:"is_active" gorm:"default:true"`
 	CreatedAt    time.Time      `json:"created_at"`
@@ -57,18 +54,4 @@ func (u *User) BeforeCreate(tx *gorm.DB) error {
 func (u *User) BeforeUpdate(tx *gorm.DB) error {
 	u.UpdatedAt = time.Now()
 	return nil
-}
-
-func (u *User) SetPassword(password string) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	u.PasswordHash = string(hash)
-	return nil
-}
-
-func (u *User) CheckPassword(password string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
-	return err == nil
 }

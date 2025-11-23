@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"strings"
+	"errors"
 
 	openapi "github.com/wozhdeleniye/avito-tech-internship/api"
 	serviceerrors "github.com/wozhdeleniye/avito-tech-internship/internal/pkg/errors"
@@ -30,22 +30,24 @@ func (ts *TeamService) CreateTeam(ctx context.Context, req openapi.Team) (*opena
 		Members:  make([]*models.User, 0, len(req.Members)),
 	}
 	for _, member := range req.Members {
-		user, err := ts.UserRepo.GetUserByCustomID(ctx, member.UserId)
-		if err != nil {
-			return nil, serviceerrors.ErrUnknown
+		if member.UserId == "" {
+			continue
 		}
-		if user == nil {
-			return nil, serviceerrors.ErrUserNotFound
+
+		user := &models.User{
+			Nickname:     member.Username,
+			UserCustomID: member.UserId,
+			IsActive:     member.IsActive,
 		}
-		if user.TeamID != nil {
-			return nil, serviceerrors.ErrUserNotFound
-		}
+
 		newTeam.Members = append(newTeam.Members, user)
 	}
 
 	if err := ts.TeamRepo.CreateTeamWithMembers(ctx, &newTeam); err != nil {
-		le := strings.ToLower(err.Error())
-		if strings.Contains(le, "duplicate") || strings.Contains(le, "unique") || strings.Contains(le, "violates unique") {
+		if errors.Is(err, postgresrepository.ErrUserExists) {
+			return nil, serviceerrors.ErrUserExists
+		}
+		if errors.Is(err, postgresrepository.ErrTeamExists) {
 			return nil, serviceerrors.ErrTeamExists
 		}
 		return nil, serviceerrors.ErrUnknown
@@ -66,9 +68,9 @@ func (ts *TeamService) CreateTeam(ctx context.Context, req openapi.Team) (*opena
 }
 
 func (ts *TeamService) GetTeamQuery(ctx context.Context, req openapi.TeamNameQuery) (*openapi.Team, *serviceerrors.ServiceError) {
-	team, err := ts.TeamRepo.FindTeamsByName(ctx, req)
+	team, err := ts.TeamRepo.FindTeamByName(ctx, req)
 	if err != nil {
-		return nil, serviceerrors.ErrUnknown
+		return nil, serviceerrors.ErrTeamNotFound
 	}
 	if team == nil {
 		return nil, serviceerrors.ErrTeamNotFound
@@ -86,4 +88,22 @@ func (ts *TeamService) GetTeamQuery(ctx context.Context, req openapi.TeamNameQue
 		})
 	}
 	return &teamResp, nil
+}
+
+func (s *TeamService) SetUserActive(ctx context.Context, userId string, isActive bool) (*models.User, *serviceerrors.ServiceError) {
+	user, err := s.UserRepo.GetUserByCustomId(ctx, userId)
+	if err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+	if user == nil {
+		return nil, serviceerrors.ErrUserNotFound
+	}
+
+	user.IsActive = isActive
+
+	if err := s.UserRepo.UpdateUser(ctx, user); err != nil {
+		return nil, serviceerrors.ErrUnknown
+	}
+
+	return user, nil
 }

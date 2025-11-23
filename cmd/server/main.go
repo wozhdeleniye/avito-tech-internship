@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -8,10 +9,8 @@ import (
 	"github.com/wozhdeleniye/avito-tech-internship/internal/app/router"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/config"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/pkg/db/database"
-	"github.com/wozhdeleniye/avito-tech-internship/internal/pkg/db/redis"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/migrations"
 	postgresrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/postgres_repository"
-	redisrepository "github.com/wozhdeleniye/avito-tech-internship/internal/repo/repositories/redis_repository"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/services"
 )
 
@@ -26,6 +25,8 @@ func main() {
 		cfg.Database.DBName,
 		cfg.Database.SSLMode,
 	)
+
+	fmt.Println(cfg.Database.Password)
 
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
@@ -43,29 +44,14 @@ func main() {
 	migrator := migrations.NewGormMigrator(db)
 	migrator.Migrate()
 
-	redisClient, err := redis.NewRedisConnection(
-		cfg.Redis.Host,
-		cfg.Redis.Port,
-		cfg.Redis.Password,
-		cfg.Redis.DB,
-	)
-
-	if err != nil {
-		log.Fatal("Failed to connect to Redis:", err)
-	}
-
-	defer redisClient.Close()
-
 	userRepo := postgresrepository.NewUserRepository(db)
 	teamRepo := postgresrepository.NewTeamRepository(db)
 	prRepo := postgresrepository.NewPReqRepository(db)
-	tokenRepo := redisrepository.NewTokenRepository(redisClient)
 
-	authService := services.NewAuthService(userRepo, tokenRepo, cfg.JWT)
 	teamService := services.NewTeamService(prRepo, teamRepo, userRepo)
 	prService := services.NewPReqService(prRepo, teamRepo, userRepo)
 
-	r := router.NewApp(authService, prService, teamService)
+	r := router.NewApp(prService, teamService)
 
 	addr := cfg.Server.Port
 	if !strings.HasPrefix(addr, ":") {

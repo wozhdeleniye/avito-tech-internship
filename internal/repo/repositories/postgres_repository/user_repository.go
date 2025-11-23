@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/google/uuid"
 	"github.com/wozhdeleniye/avito-tech-internship/internal/repo/models"
 	"gorm.io/gorm"
 )
@@ -19,42 +18,15 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 
 func (r *UserRepository) CreateUser(ctx context.Context, user *models.User) error {
 	result := r.db.WithContext(ctx).Create(user)
-	return result.Error
-}
-
-func (r *UserRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
-	result := r.db.WithContext(ctx).Where("email = ?", email).First(&user) //доделать проверку с custom id
-
-	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-
 	if result.Error != nil {
-		return nil, result.Error
+		return result.Error
 	}
-
-	return &user, nil
+	return nil
 }
 
-func (r *UserRepository) GetUserById(ctx context.Context, cutstomId string) (*models.User, error) {
+func (r *UserRepository) GetUserByCustomId(ctx context.Context, cutstomId string) (*models.User, error) {
 	var user models.User
 	result := r.db.WithContext(ctx).Where("user_custom_id = ?", cutstomId).First(&user) //доделать проверку с custom id
-
-	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-
-	if result.Error != nil {
-		return nil, result.Error
-	}
-
-	return &user, nil
-}
-
-func (r *UserRepository) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	var user models.User
-	result := r.db.WithContext(ctx).Where("id = ? AND is_active = ?", id, true).First(&user)
 
 	if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -72,13 +44,12 @@ func (r *UserRepository) UpdateUser(ctx context.Context, user *models.User) erro
 	return result.Error
 }
 
-func (r *UserRepository) UserExists(ctx context.Context, email string) (bool, error) {
-	var count int64
-	result := r.db.WithContext(ctx).Model(&models.User{}).Where("email = ? AND is_active = ?", email, true).Count(&count)
-	return count > 0, result.Error
+func (r *UserRepository) DeleteUser(ctx context.Context, user *models.User) error {
+	result := r.db.WithContext(ctx).Delete(user)
+	return result.Error
 }
 
-func (r *UserRepository) GetUserByCustomID(ctx context.Context, customID string) (*models.User, error) {
+func (r *UserRepository) GetUserByCustomIDActive(ctx context.Context, customID string) (*models.User, error) {
 	var user models.User
 	result := r.db.WithContext(ctx).Where("user_custom_id = ? AND is_active = ?", customID, true).First(&user)
 

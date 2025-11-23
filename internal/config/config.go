@@ -4,6 +4,8 @@ import (
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -41,6 +43,8 @@ type JWTConfig struct {
 }
 
 func Load() *Config {
+	_ = godotenv.Load()
+
 	return &Config{
 		Server: ServerConfig{
 			Port: getEnv("SERVER_PORT", "8085"),
@@ -49,21 +53,9 @@ func Load() *Config {
 			Host:     getEnv("DB_HOST", "localhost"),
 			Port:     getEnv("DB_PORT", "5433"),
 			User:     getEnv("DB_USER", "myuser"),
-			Password: getEnv("DB_PASSWORD", "mypassword"),
+			Password: getEnv("DB_PASSWORD", "mypassword1"),
 			DBName:   getEnv("DB_NAME", "mydatabase"),
 			SSLMode:  getEnv("DB_SSL_MODE", "disable"),
-		},
-		Redis: RedisConfig{
-			Host:     getEnv("REDIS_HOST", "localhost"),
-			Port:     getEnv("REDIS_PORT", "6379"),
-			Password: getEnv("REDIS_PASSWORD", ""),
-			DB:       getEnvAsInt("REDIS_DB", 0),
-		},
-		JWT: JWTConfig{
-			AccessTokenSecret:  getEnv("JWT_ACCESS_SECRET", "access_secret"),
-			RefreshTokenSecret: getEnv("JWT_REFRESH_SECRET", "refresh_secret"),
-			AccessTokenExpiry:  getEnvAsDuration("JWT_ACCESS_EXPIRY", time.Hour*24),
-			RefreshTokenExpiry: getEnvAsDuration("JWT_REFRESH_EXPIRY", time.Hour*24*7),
 		},
 	}
 }
