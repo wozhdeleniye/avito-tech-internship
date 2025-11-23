@@ -7,7 +7,7 @@
 1. В корне репозитория запустите:
 
 ```powershell
-docker-compose --env-file .env up --build
+docker-compose up
 ```
 
 2. Сервис по умолчанию будет доступен на `http://localhost:8085`.
