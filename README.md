@@ -19,6 +19,8 @@ docker-compose up
 
 **Моя коллекция с постмана для тестирования**
 
+[Uploading avito-tech.api.testing.postman_collection.json…]()
+
 
 # Возникшие трудности
 
