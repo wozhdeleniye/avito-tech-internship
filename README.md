@@ -19,6 +19,7 @@ docker-compose up
 
 **Моя коллекция с постмана для тестирования**
 
+[Postman Collection](https://drive.google.com/file/d/1hkPz9TZgiZ_kLa-zYnxlUcgQm-uNdn-V/view?usp=sharing)
 
 # Возникшие трудности
 
